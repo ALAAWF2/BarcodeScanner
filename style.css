@@ -688,7 +688,59 @@ main {
 }
 
 /* Responsive queries */
-@media (max-width: 1024px) {
+@media (max-width: 768px) {
+    header {
+        display: none !important;
+    }
+    
+    body {
+        background-color: #f8fafc;
+    }
+
+    main {
+        padding: 0 !important;
+        gap: 0 !important;
+        height: 100vh;
+        width: 100vw;
+    }
+    
+    .preview-container {
+        width: 100% !important;
+        height: 100vh !important;
+        margin-bottom: 0 !important;
+    }
+    
+    .dashboard-container {
+        display: none !important;
+    }
+    
+    .phone-mockup {
+        width: 100vw !important;
+        height: 100vh !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
+        box-shadow: none !important;
+        border: none !important;
+        max-width: none !important;
+        background: none !important;
+    }
+    
+    .phone-screen {
+        border-radius: 0 !important;
+        border: none !important;
+        height: 100% !important;
+    }
+    
+    .phone-notch {
+        display: none !important;
+    }
+    
+    .app-header {
+        padding-top: 1.5rem !important;
+    }
+}
+
+@media (min-width: 769px) and (max-width: 1200px) {
     main {
         flex-direction: column;
         align-items: center;

@@ -54,7 +54,7 @@ function queryBarcode(sheet, barcode) {
     return createJsonResponse({ success: false, message: "الباركود مطلوب" });
   }
   
-  var data = sheet.getDataRange().getValues();
+  var data = sheet.getDataRange().getDisplayValues();
   
   // البحث في العمود الأول (الباركود)
   for (var i = 1; i < data.length; i++) {
@@ -82,7 +82,7 @@ function updateQuantity(sheet, barcode, qty) {
     return createJsonResponse({ success: false, message: "الباركود والكمية مطلوبان" });
   }
   
-  var data = sheet.getDataRange().getValues();
+  var data = sheet.getDataRange().getDisplayValues();
   
   for (var i = 1; i < data.length; i++) {
     var sheetBarcode = String(data[i][0]).trim();
@@ -107,7 +107,7 @@ function addNewProduct(sheet, barcode, name) {
     return createJsonResponse({ success: false, message: "الباركود والاسم مطلوبان" });
   }
   
-  var data = sheet.getDataRange().getValues();
+  var data = sheet.getDataRange().getDisplayValues();
   
   // التأكد أولاً من عدم تكراره
   for (var i = 1; i < data.length; i++) {
@@ -118,7 +118,7 @@ function addNewProduct(sheet, barcode, name) {
   
   // إضافة صف جديد بالقيم الأساسية
   sheet.appendRow([
-    String(barcode).trim(), // A: الباركود
+    "'" + String(barcode).trim(), // A: الباركود
     name,                  // B: الاسم
     0,                     // C: الكمية الدفترية الافتراضية
     "",                    // D: الكمية الفعلية فارغة بانتظار الجرد
@@ -138,7 +138,7 @@ function createJsonResponse(data) {
 
 // 4. جلب جميع المنتجات في الشيت لعرضها بالجدول
 function getAllProducts(sheet) {
-  var data = sheet.getDataRange().getValues();
+  var data = sheet.getDataRange().getDisplayValues();
   var productsList = [];
   
   for (var i = 1; i < data.length; i++) {

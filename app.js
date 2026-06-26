@@ -12,6 +12,7 @@ let logs = [];
 let html5QrcodeScanner = null;
 let isScanning = false;
 let currentlyScannedProduct = null;
+let isProcessingScan = false;
 
 // Initialize App
 document.addEventListener("DOMContentLoaded", () => {
@@ -180,17 +181,26 @@ function updateStats() {
 function updateConnectionBadge(isLive) {
     const badge = document.getElementById("connection-status");
     const badgeDot = document.querySelector(".badge-dot");
+    const mobSub = document.getElementById("app-connection-indicator");
     
     if (isLive) {
         badge.innerText = "متصل بجوجل شيت الحقيقي مباشر";
         badge.style.color = "#60a5fa";
         badgeDot.style.backgroundColor = "#3b82f6";
         badgeDot.style.boxShadow = "0 0 8px #3b82f6";
+        if (mobSub) {
+            mobSub.innerHTML = '🟢 شيت جوجل متصل';
+            mobSub.style.color = '#10b981';
+        }
     } else {
         badge.innerText = "وضع محاكاة البيانات النشط";
         badge.style.color = "#a5b4fc";
         badgeDot.style.backgroundColor = "var(--accent-green)";
         badgeDot.style.boxShadow = "0 0 8px var(--accent-green)";
+        if (mobSub) {
+            mobSub.innerHTML = '⚪ وضع المحاكاة المحلي';
+            mobSub.style.color = '#64748b';
+        }
     }
 }
 
@@ -227,6 +237,7 @@ function setupEventListeners() {
         document.getElementById("product-details-card").style.display = "none";
         document.getElementById("scanner-section").style.display = "flex";
         currentlyScannedProduct = null;
+        isProcessingScan = false;
         renderSheet();
     });
 
@@ -351,6 +362,9 @@ function showNotification(text, type = "info") {
 
 // Handle scanned/found product display
 function processBarcode(barcode) {
+    if (isProcessingScan) return;
+    isProcessingScan = true;
+    
     playBeep();
     triggerVibrate();
     
@@ -460,7 +474,25 @@ async function addNewProductToLive(barcode, name) {
         
         if (data.success) {
             showNotification("تمت إضافة المنتج بنجاح", "success");
-            queryLiveProduct(barcode);
+            
+            currentlyScannedProduct = {
+                barcode: barcode,
+                name: name,
+                bookQty: 0,
+                actualQty: null,
+                status: "pending"
+            };
+            
+            let localIdx = products.findIndex(p => p.barcode === barcode);
+            if (localIdx !== -1) {
+                products[localIdx] = currentlyScannedProduct;
+            } else {
+                products.push(currentlyScannedProduct);
+            }
+            saveToLocalStorage();
+            renderSheet();
+            
+            showProductCard(name, barcode, 0, null, "pending");
         } else {
             showNotification("فشل إضافة المنتج", "error");
             resetToScanMode();
@@ -596,6 +628,7 @@ function resetToScanMode() {
     document.getElementById("product-details-card").style.display = "none";
     document.getElementById("scanner-section").style.display = "flex";
     currentlyScannedProduct = null;
+    isProcessingScan = false;
     renderSheet(); // clear highlights
 }
 
