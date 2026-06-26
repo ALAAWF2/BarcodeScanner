@@ -4,15 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>نظام جرد المستودعات الذكي بالباركود</title>
+    <!-- Content Security Policy -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: https:; connect-src 'self' https:; manifest-src 'self';">
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#4f46e5">
     <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" crossorigin="anonymous">
     <!-- Main Style Sheet -->
     <link rel="stylesheet" href="style.css">
     <!-- Html5-Qrcode CDN -->
-    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript" crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -22,9 +24,14 @@
             <h1>نظام الجرد الذكي بالباركود ⚡</h1>
             <p>حل متكامل لربط الهواتف المحمولة بجداول جوجل شيت (Google Sheets)</p>
         </div>
-        <div class="badge">
-            <span class="badge-dot"></span>
-            <span id="connection-status">وضع محاكاة البيانات النشط</span>
+        <div class="header-actions">
+            <button class="btn-icon-only" id="btn-dark-mode" title="الوضع الليلي/النهاري">
+                <i class="bi bi-moon-stars-fill" id="dark-mode-icon"></i>
+            </button>
+            <div class="badge">
+                <span class="badge-dot"></span>
+                <span id="connection-status">وضع محاكاة البيانات النشط</span>
+            </div>
         </div>
     </header>
 
@@ -66,6 +73,28 @@
                             </div>
                         </div>
 
+                        <!-- Progress Bar -->
+                        <div class="progress-bar-container">
+                            <div class="progress-bar-header">
+                                <span>تقدم الجرد</span>
+                                <span id="progress-percent">0%</span>
+                            </div>
+                            <div class="progress-bar-track">
+                                <div class="progress-bar-fill" id="progress-bar-fill"></div>
+                            </div>
+                        </div>
+
+                        <!-- Batch Mode Indicator -->
+                        <div class="batch-mode-box" id="batch-mode-box" style="display: none;">
+                            <div class="batch-info">
+                                <i class="bi bi-layers-fill"></i>
+                                <span>وضع المسح المتتابع — <strong id="batch-count">0</strong> عنصر في القائمة</span>
+                            </div>
+                            <button class="btn btn-success btn-sm" id="btn-batch-upload">
+                                <i class="bi bi-cloud-upload-fill"></i> رفع الكل
+                            </button>
+                        </div>
+
                         <!-- Scanner Card -->
                         <div class="scanner-card" id="scanner-section">
                             <div class="scanner-view-container" id="scanner-container">
@@ -81,10 +110,16 @@
                                 </div>
                                 <div id="reader" style="display: none;"></div>
                             </div>
-                            <button class="btn btn-primary" id="btn-toggle-scan">
-                                <i class="bi bi-camera"></i>
-                                <span id="scan-btn-text">افتح الكاميرا وابدأ المسح</span>
-                            </button>
+                            <div class="scanner-buttons">
+                                <button class="btn btn-primary" id="btn-toggle-scan">
+                                    <i class="bi bi-camera"></i>
+                                    <span id="scan-btn-text">افتح الكاميرا وابدأ المسح</span>
+                                </button>
+                                <button class="btn btn-secondary btn-sm" id="btn-toggle-batch" title="مسح متتابع بدون توقف">
+                                    <i class="bi bi-layers"></i>
+                                    <span>مسح متتابع</span>
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Product Information & Edit Form (Hidden by default, shown when scanned) -->
@@ -124,6 +159,29 @@
                             </div>
                         </div>
 
+                        <!-- Inline New Product Form (replaces prompt) -->
+                        <div class="product-details-card" id="new-product-card" style="display: none;">
+                            <div class="product-info-header">
+                                <div>
+                                    <div class="product-name">منتج جديد غير مسجل</div>
+                                    <div class="product-code" id="new-product-barcode">-</div>
+                                </div>
+                                <span class="status-badge status-pending">جديد</span>
+                            </div>
+                            <div class="input-group">
+                                <label>أدخل اسم المنتج الجديد:</label>
+                                <input type="text" class="form-control" id="new-product-name" placeholder="اسم المنتج...">
+                            </div>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button class="btn btn-success" id="btn-confirm-new-product" style="flex: 2;">
+                                    <i class="bi bi-plus-circle-fill"></i> إضافة للشيت
+                                </button>
+                                <button class="btn btn-secondary" id="btn-cancel-new-product" style="flex: 1;">
+                                    إلغاء
+                                </button>
+                            </div>
+                        </div>
+
                         <!-- Manual Input Form -->
                         <div class="manual-input-box">
                             <div class="input-group">
@@ -145,6 +203,38 @@
         <!-- Right Side: Dashboard & Google Sheet Simulator -->
         <div class="dashboard-container">
             
+            <!-- Inventory Summary Stats -->
+            <div class="summary-stats-row">
+                <div class="summary-stat-card summary-total">
+                    <div class="summary-icon"><i class="bi bi-box-seam"></i></div>
+                    <div class="summary-info">
+                        <div class="summary-val" id="summary-total">0</div>
+                        <div class="summary-lbl">إجمالي المنتجات</div>
+                    </div>
+                </div>
+                <div class="summary-stat-card summary-checked">
+                    <div class="summary-icon"><i class="bi bi-check2-all"></i></div>
+                    <div class="summary-info">
+                        <div class="summary-val" id="summary-checked">0</div>
+                        <div class="summary-lbl">تم جردة</div>
+                    </div>
+                </div>
+                <div class="summary-stat-card summary-pending">
+                    <div class="summary-icon"><i class="bi bi-hourglass-split"></i></div>
+                    <div class="summary-info">
+                        <div class="summary-val" id="summary-pending">0</div>
+                        <div class="summary-lbl">معلق</div>
+                    </div>
+                </div>
+                <div class="summary-stat-card summary-discrepancy">
+                    <div class="summary-icon"><i class="bi bi-exclamation-triangle"></i></div>
+                    <div class="summary-info">
+                        <div class="summary-val" id="summary-discrepancy">0</div>
+                        <div class="summary-lbl">فروقات</div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Google Sheet Live Simulator -->
             <div class="dashboard-card">
                 <div class="dashboard-card-header">
@@ -152,9 +242,15 @@
                         <i class="bi bi-table" style="color: #10b981;"></i>
                         <span>محاكي Google Sheet (قاعدة البيانات أونلاين)</span>
                     </div>
-                    <button class="btn btn-secondary" id="btn-reset-sheet" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; border-radius: 8px;">
-                        <i class="bi bi-arrow-counterclockwise"></i> إعادة ضبط البيانات
-                    </button>
+                    <div class="dashboard-header-actions">
+                        <input type="text" class="form-control search-input" id="search-input" placeholder="بحث..." style="width: 140px; font-size: 0.8rem; padding: 0.4rem 0.8rem;">
+                        <button class="btn btn-secondary" id="btn-export-csv" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; border-radius: 8px;" title="تصدير CSV">
+                            <i class="bi bi-filetype-csv"></i> CSV
+                        </button>
+                        <button class="btn btn-secondary" id="btn-reset-sheet" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; border-radius: 8px;">
+                            <i class="bi bi-arrow-counterclockwise"></i> إعادة ضبط
+                        </button>
+                    </div>
                 </div>
                 <div class="dashboard-table-container">
                     <table class="dashboard-table">
@@ -164,6 +260,7 @@
                                 <th>اسم المنتج</th>
                                 <th>الكمية الدفترية</th>
                                 <th>الكمية الفعلية</th>
+                                <th>الفرق</th>
                                 <th>الحالة</th>
                             </tr>
                         </thead>
@@ -181,6 +278,9 @@
                         <i class="bi bi-clipboard-data" style="color: #6366f1;"></i>
                         <span>سجل عمليات الجرد اللحظية</span>
                     </div>
+                    <button class="btn btn-secondary btn-sm" id="btn-clear-logs" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; border-radius: 8px;">
+                        <i class="bi bi-trash3"></i> مسح السجل
+                    </button>
                 </div>
                 <div class="log-list" id="log-list">
                     <div class="scan-placeholder" style="padding: 1rem 0;" id="empty-logs-msg">
@@ -205,6 +305,10 @@
                     <div class="input-group" style="margin-top: 0.5rem;">
                         <label for="web-app-url">رابط تطبيق ويب جوجل (Google Apps Script URL):</label>
                         <input type="url" id="web-app-url" class="form-control" style="font-family: var(--font-en);" placeholder="https://script.google.com/macros/s/.../exec">
+                    </div>
+                    <div class="input-group" style="margin-top: 0.5rem;">
+                        <label for="api-token">رمز الحماية (Token):</label>
+                        <input type="password" id="api-token" class="form-control" style="font-family: var(--font-en);" placeholder="أدخل الرمز الذي وضعته في google-script.js">
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem;">
                         <input type="checkbox" id="enable-live-sync" style="width: 18px; height: 18px; cursor: pointer;">

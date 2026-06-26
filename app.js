@@ -13,20 +13,27 @@ let html5QrcodeScanner = null;
 let isScanning = false;
 let currentlyScannedProduct = null;
 let isProcessingScan = false;
+let batchMode = false;
+let batchQueue = [];
+let searchFilter = "";
 
 // Initialize App
 document.addEventListener("DOMContentLoaded", () => {
     loadData();
     renderSheet();
     updateStats();
+    updateProgress();
+    updateSummaryStats();
     setupEventListeners();
     registerServiceWorker();
+    loadDarkModePreference();
 });
 
 // Load Data from LocalStorage or use Defaults
 function loadData() {
     const savedProducts = localStorage.getItem("inventory_products");
     const savedLogs = localStorage.getItem("inventory_logs");
+    const savedBatch = localStorage.getItem("inventory_batch_queue");
     
     if (savedProducts) {
         products = JSON.parse(savedProducts);
@@ -40,17 +47,22 @@ function loadData() {
         renderLogs();
     }
 
-    // Load Settings
-    const defaultUrl = "https://script.google.com/macros/s/AKfycbxZPsBBfIef7zOaw88gaXajYNjVk0EvKmUwgar3RlxWxlAXmWvyGY88L2OTkYgYTVowKw/exec";
-    const savedUrl = localStorage.getItem("google_app_url") || defaultUrl;
-    const savedLiveSync = localStorage.getItem("google_live_sync") !== null ? localStorage.getItem("google_live_sync") : "true";
+    if (savedBatch) {
+        batchQueue = JSON.parse(savedBatch);
+        if (batchQueue.length > 0) {
+            updateBatchUI();
+        }
+    }
+
+    // Load Settings — NO default URL hardcoded for security
+    const savedUrl = localStorage.getItem("google_app_url") || "";
+    const savedToken = localStorage.getItem("api_token") || "";
+    const savedLiveSync = localStorage.getItem("google_live_sync") !== null ? localStorage.getItem("google_live_sync") : "false";
     
     document.getElementById("web-app-url").value = savedUrl;
-    if (!localStorage.getItem("google_app_url")) {
-        localStorage.setItem("google_app_url", defaultUrl);
-    }
+    document.getElementById("api-token").value = savedToken;
     
-    if (savedLiveSync === "true") {
+    if (savedLiveSync === "true" && savedUrl) {
         document.getElementById("enable-live-sync").checked = true;
         updateConnectionBadge(true);
         fetchLiveProducts();
@@ -65,18 +77,25 @@ function saveToLocalStorage() {
     localStorage.setItem("inventory_logs", JSON.stringify(logs));
 }
 
+// Save batch queue
+function saveBatchQueue() {
+    localStorage.setItem("inventory_batch_queue", JSON.stringify(batchQueue));
+}
+
 // Fetch all products from Google Sheets
 async function fetchLiveProducts() {
     const isLive = document.getElementById("enable-live-sync").checked;
     const url = document.getElementById("web-app-url").value.trim();
+    const token = document.getElementById("api-token").value.trim();
     
     if (!isLive || !url) return;
     
     const tableBody = document.getElementById("sheet-table-body");
-    tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--primary);">⏱️ جاري تحميل البيانات من جوجل شيت الحقيقي...</td></tr>`;
+    tableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 2rem; color: var(--primary);">⏱️ جاري تحميل البيانات من جوجل شيت الحقيقي...</td></tr>`;
     
     try {
-        const fetchUrl = `${url}?action=all`;
+        let fetchUrl = `${url}?action=all`;
+        if (token) fetchUrl += `&token=${encodeURIComponent(token)}`;
         const response = await fetch(fetchUrl);
         const data = await response.json();
         
@@ -84,6 +103,8 @@ async function fetchLiveProducts() {
             products = data.products;
             renderSheet();
             updateStats();
+            updateProgress();
+            updateSummaryStats();
             showNotification("تم تحديث قائمة المنتجات من جوجل شيت", "success");
         } else {
             showNotification("خطأ في جلب بيانات جوجل شيت", "error");
@@ -101,6 +122,8 @@ function loadFallbackMockData() {
     products = savedProducts ? JSON.parse(savedProducts) : JSON.parse(JSON.stringify(DEFAULT_PRODUCTS));
     renderSheet();
     updateStats();
+    updateProgress();
+    updateSummaryStats();
 }
 
 // Render Simulator Google Sheet Table
@@ -108,18 +131,37 @@ function renderSheet() {
     const tableBody = document.getElementById("sheet-table-body");
     tableBody.innerHTML = "";
     
-    products.forEach(p => {
+    const filteredProducts = products.filter(p => {
+        if (!searchFilter) return true;
+        const q = searchFilter.toLowerCase();
+        return p.barcode.toLowerCase().includes(q) || p.name.toLowerCase().includes(q);
+    });
+    
+    if (filteredProducts.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 1.5rem; color: var(--text-muted);">لا توجد نتائج مطابقة للبحث</td></tr>`;
+        return;
+    }
+    
+    filteredProducts.forEach(p => {
         const tr = document.createElement("tr");
         
         const statusClass = p.status === "checked" ? "status-checked" : "status-pending";
         const statusText = p.status === "checked" ? "تم الجرد" : "معلق";
         const actualQtyText = p.actualQty !== null ? p.actualQty : "-";
+        const diff = (p.actualQty !== null && p.bookQty !== null) ? (parseInt(p.actualQty) - parseInt(p.bookQty)) : null;
+        let diffText = "-";
+        let diffColor = "inherit";
+        if (diff !== null) {
+            diffText = diff > 0 ? `+${diff}` : `${diff}`;
+            diffColor = diff === 0 ? "var(--accent-green)" : (diff < 0 ? "var(--accent-red)" : "var(--accent-green)");
+        }
         
         tr.innerHTML = `
             <td class="code-cell">${p.barcode}</td>
             <td><strong>${p.name}</strong></td>
             <td>${p.bookQty}</td>
             <td style="font-weight: 700; color: ${p.actualQty !== null ? 'var(--accent-green)' : 'inherit'}">${actualQtyText}</td>
+            <td style="font-weight: 700; color: ${diffColor}">${diffText}</td>
             <td><span class="status-badge ${statusClass}">${statusText}</span></td>
         `;
         
@@ -149,8 +191,8 @@ function renderLogs() {
     
     emptyMsg.style.display = "none";
     
-    // Render top 5 logs
-    logs.slice(-5).reverse().forEach(log => {
+    // Render top 10 logs
+    logs.slice(-10).reverse().forEach(log => {
         const item = document.createElement("div");
         item.className = "log-item";
         
@@ -177,6 +219,37 @@ function updateStats() {
     document.getElementById("app-checked-count").innerText = `${checkedCount} / ${products.length}`;
 }
 
+// Update Progress Bar
+function updateProgress() {
+    const checkedCount = products.filter(p => p.status === "checked").length;
+    const total = products.length;
+    const percent = total > 0 ? Math.round((checkedCount / total) * 100) : 0;
+    
+    document.getElementById("progress-percent").innerText = `${percent}%`;
+    document.getElementById("progress-bar-fill").style.width = `${percent}%`;
+}
+
+// Update Summary Stats (dashboard cards)
+function updateSummaryStats() {
+    const total = products.length;
+    const checked = products.filter(p => p.status === "checked").length;
+    const pending = total - checked;
+    let discrepancies = 0;
+    
+    products.forEach(p => {
+        if (p.actualQty !== null && p.bookQty !== null) {
+            if (parseInt(p.actualQty) !== parseInt(p.bookQty)) {
+                discrepancies++;
+            }
+        }
+    });
+    
+    document.getElementById("summary-total").innerText = total;
+    document.getElementById("summary-checked").innerText = checked;
+    document.getElementById("summary-pending").innerText = pending;
+    document.getElementById("summary-discrepancy").innerText = discrepancies;
+}
+
 // Update Connection status badge
 function updateConnectionBadge(isLive) {
     const badge = document.getElementById("connection-status");
@@ -194,7 +267,7 @@ function updateConnectionBadge(isLive) {
         }
     } else {
         badge.innerText = "وضع محاكاة البيانات النشط";
-        badge.style.color = "#a5b4fc";
+        badge.style.color = "var(--accent-green)";
         badgeDot.style.backgroundColor = "var(--accent-green)";
         badgeDot.style.boxShadow = "0 0 8px var(--accent-green)";
         if (mobSub) {
@@ -208,6 +281,15 @@ function updateConnectionBadge(isLive) {
 function setupEventListeners() {
     // Scan Toggle Button
     document.getElementById("btn-toggle-scan").addEventListener("click", toggleScanner);
+    
+    // Batch Mode Toggle
+    document.getElementById("btn-toggle-batch").addEventListener("click", toggleBatchMode);
+    
+    // Batch Upload Button
+    document.getElementById("btn-batch-upload").addEventListener("click", uploadBatchQueue);
+    
+    // Dark Mode Toggle
+    document.getElementById("btn-dark-mode").addEventListener("click", toggleDarkMode);
     
     // Settings Toggle
     document.getElementById("settings-toggle").addEventListener("click", () => {
@@ -257,15 +339,39 @@ function setupEventListeners() {
         if (confirm("هل أنت متأكد من إعادة ضبط جميع بيانات الجرد والمحاكاة؟")) {
             products = JSON.parse(JSON.stringify(DEFAULT_PRODUCTS));
             logs = [];
+            batchQueue = [];
             saveToLocalStorage();
+            saveBatchQueue();
             renderSheet();
             renderLogs();
             updateStats();
+            updateProgress();
+            updateSummaryStats();
+            updateBatchUI();
             document.getElementById("product-details-card").style.display = "none";
+            document.getElementById("new-product-card").style.display = "none";
             document.getElementById("scanner-section").style.display = "flex";
             currentlyScannedProduct = null;
             showNotification("تمت إعادة ضبط البيانات بنجاح", "success");
         }
+    });
+
+    // Clear Logs
+    document.getElementById("btn-clear-logs").addEventListener("click", () => {
+        if (logs.length === 0) return;
+        logs = [];
+        saveToLocalStorage();
+        renderLogs();
+        showNotification("تم مسح سجل العمليات", "info");
+    });
+
+    // Export CSV
+    document.getElementById("btn-export-csv").addEventListener("click", exportCSV);
+
+    // Search Filter
+    document.getElementById("search-input").addEventListener("input", (e) => {
+        searchFilter = e.target.value.trim();
+        renderSheet();
     });
 
     // Live Sync Checkbox & URL changes
@@ -293,10 +399,30 @@ function setupEventListeners() {
     document.getElementById("web-app-url").addEventListener("input", (e) => {
         localStorage.setItem("google_app_url", e.target.value.trim());
     });
+
+    document.getElementById("api-token").addEventListener("input", (e) => {
+        localStorage.setItem("api_token", e.target.value.trim());
+    });
+
+    // Inline New Product Form
+    document.getElementById("btn-confirm-new-product").addEventListener("click", handleConfirmNewProduct);
+    document.getElementById("btn-cancel-new-product").addEventListener("click", () => {
+        document.getElementById("new-product-card").style.display = "none";
+        document.getElementById("scanner-section").style.display = "flex";
+        isProcessingScan = false;
+        if (batchMode) {
+            // Resume scanning in batch mode
+        }
+    });
+    document.getElementById("new-product-name").addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+            handleConfirmNewProduct();
+        }
+    });
 }
 
-// Synthesizer POS Beep
-function playBeep() {
+// Synthesizer POS Beep — Success
+function playBeep(type = "success") {
     try {
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         const oscillator = audioCtx.createOscillator();
@@ -305,22 +431,43 @@ function playBeep() {
         oscillator.connect(gainNode);
         gainNode.connect(audioCtx.destination);
         
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(1200, audioCtx.currentTime); // High pitch beep
-        gainNode.gain.setValueAtTime(0.08, audioCtx.currentTime);
-        gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
-        
-        oscillator.start(audioCtx.currentTime);
-        oscillator.stop(audioCtx.currentTime + 0.12);
+        if (type === "error") {
+            // Low double-beep for errors / not found
+            oscillator.type = 'square';
+            oscillator.frequency.setValueAtTime(400, audioCtx.currentTime);
+            gainNode.gain.setValueAtTime(0.08, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + 0.1);
+            // Second beep
+            const osc2 = audioCtx.createOscillator();
+            const gain2 = audioCtx.createGain();
+            osc2.connect(gain2);
+            gain2.connect(audioCtx.destination);
+            osc2.type = 'square';
+            osc2.frequency.setValueAtTime(350, audioCtx.currentTime + 0.12);
+            gain2.gain.setValueAtTime(0.08, audioCtx.currentTime + 0.12);
+            gain2.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.22);
+            osc2.start(audioCtx.currentTime + 0.12);
+            osc2.stop(audioCtx.currentTime + 0.22);
+        } else {
+            // High pitch beep for success
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(1200, audioCtx.currentTime);
+            gainNode.gain.setValueAtTime(0.08, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
+            oscillator.start(audioCtx.currentTime);
+            oscillator.stop(audioCtx.currentTime + 0.12);
+        }
     } catch (e) {
         console.warn("Audio Context not allowed or supported", e);
     }
 }
 
 // Trigger Mobile Vibration
-function triggerVibrate() {
+function triggerVibrate(pattern = 100) {
     if (navigator.vibrate) {
-        navigator.vibrate(100);
+        navigator.vibrate(pattern);
     }
 }
 
@@ -337,7 +484,7 @@ function showNotification(text, type = "info") {
     banner.style.top = "60px";
     banner.style.left = "15px";
     banner.style.right = "15px";
-    banner.style.backgroundColor = "#1e293b";
+    banner.style.backgroundColor = document.body.classList.contains("dark-mode") ? "#1e293b" : "#1e293b";
     banner.style.borderRight = `4px solid ${color}`;
     banner.style.padding = "0.75rem 1rem";
     banner.style.borderRadius = "8px";
@@ -362,31 +509,202 @@ function showNotification(text, type = "info") {
 
 // Handle scanned/found product display
 function processBarcode(barcode) {
-    if (isProcessingScan) return;
-    isProcessingScan = true;
+    if (isProcessingScan && !batchMode) return;
     
-    playBeep();
-    triggerVibrate();
+    playBeep("success");
+    triggerVibrate(100);
     
     // Visual flash
     const indicator = document.getElementById("scan-success-indicator");
     indicator.classList.add("active");
     setTimeout(() => indicator.classList.remove("active"), 400);
-
+    
     document.getElementById("app-last-scan").innerText = barcode;
     
     const isLive = document.getElementById("enable-live-sync").checked;
     const url = document.getElementById("web-app-url").value.trim();
     
-    // Stop scanning to display product
+    // In batch mode: don't stop scanning, just queue the product
+    if (batchMode) {
+        handleBatchScan(barcode);
+        return;
+    }
+    
+    // Stop scanning to display product (normal mode)
     if (isScanning) {
         stopScanning();
     }
+    
+    isProcessingScan = true;
     
     if (isLive && url) {
         queryLiveProduct(barcode);
     } else {
         queryMockProduct(barcode);
+    }
+}
+
+// Batch Mode: Handle scan in batch
+function handleBatchScan(barcode) {
+    // Check if already in queue
+    const existingIdx = batchQueue.findIndex(item => item.barcode === barcode);
+    
+    if (existingIdx !== -1) {
+        // Already scanned before — increment quantity
+        batchQueue[existingIdx].qty += 1;
+        showNotification(`تم زيادة كمية: ${batchQueue[existingIdx].name} (${batchQueue[existingIdx].qty})`, "info");
+    } else {
+        // Find product in local list
+        const product = products.find(p => p.barcode === barcode);
+        if (product) {
+            batchQueue.push({
+                barcode: barcode,
+                name: product.name,
+                qty: 1,
+                bookQty: product.bookQty
+            });
+            showNotification(`أضيف للقائمة: ${product.name}`, "success");
+        } else {
+            // New product
+            batchQueue.push({
+                barcode: barcode,
+                name: `منتج جديد (${barcode.slice(-4)})`,
+                qty: 1,
+                bookQty: 0
+            });
+            showNotification(`منتج جديد أضيف للقائمة: ${barcode.slice(-4)}`, "info");
+        }
+    }
+    
+    saveBatchQueue();
+    updateBatchUI();
+}
+
+// Update batch UI
+function updateBatchUI() {
+    const batchBox = document.getElementById("batch-mode-box");
+    const batchCount = document.getElementById("batch-count");
+    
+    if (batchQueue.length > 0) {
+        batchBox.style.display = "flex";
+        batchCount.innerText = batchQueue.length;
+    } else {
+        batchBox.style.display = "none";
+    }
+}
+
+// Toggle Batch Mode
+function toggleBatchMode() {
+    batchMode = !batchMode;
+    const btn = document.getElementById("btn-toggle-batch");
+    
+    if (batchMode) {
+        btn.classList.add("btn-active-batch");
+        showNotification("وضع المسح المتتابع مفعّل — امسح بدون توقف، ارفع لاحقاً", "info");
+        // Auto-start scanner if not already scanning
+        if (!isScanning) {
+            startScanning();
+        }
+    } else {
+        btn.classList.remove("btn-active-batch");
+        showNotification("وضع المسح المتتابع متوقف", "info");
+    }
+}
+
+// Upload Batch Queue
+async function uploadBatchQueue() {
+    if (batchQueue.length === 0) {
+        showNotification("قائمة المسح المتتابع فارغة", "error");
+        return;
+    }
+    
+    const isLive = document.getElementById("enable-live-sync").checked;
+    const url = document.getElementById("web-app-url").value.trim();
+    const token = document.getElementById("api-token").value.trim();
+    
+    if (isLive && url) {
+        // Live bulk upload
+        showNotification(`جاري رفع ${batchQueue.length} عنصر لجوجل شيت...`, "info");
+        try {
+            const batchData = JSON.stringify(batchQueue.map(item => ({
+                barcode: item.barcode,
+                name: item.name,
+                qty: item.qty
+            })));
+            
+            let uploadUrl = `${url}?action=bulkUpdate`;
+            if (token) uploadUrl += `&token=${encodeURIComponent(token)}`;
+            
+            const response = await fetch(uploadUrl, {
+                method: 'POST',
+                body: batchData
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                // Add logs for each item
+                batchQueue.forEach(item => {
+                    logs.push({
+                        barcode: item.barcode,
+                        productName: item.name,
+                        oldQty: null,
+                        newQty: item.qty,
+                        timestamp: new Date().toISOString()
+                    });
+                });
+                
+                saveToLocalStorage();
+                renderLogs();
+                batchQueue = [];
+                saveBatchQueue();
+                updateBatchUI();
+                fetchLiveProducts();
+                showNotification(`تم رفع ${batchQueue.length} عنصر بنجاح!`, "success");
+            } else {
+                showNotification("فشل رفع الدفعة لجوجل شيت", "error");
+            }
+        } catch (error) {
+            console.error("Batch upload error:", error);
+            showNotification("خطأ في رفع الدفعة", "error");
+        }
+    } else {
+        // Mock batch update
+        batchQueue.forEach(item => {
+            const idx = products.findIndex(p => p.barcode === item.barcode);
+            if (idx !== -1) {
+                products[idx].actualQty = item.qty;
+                products[idx].status = "checked";
+            } else {
+                products.push({
+                    barcode: item.barcode,
+                    name: item.name,
+                    bookQty: 0,
+                    actualQty: item.qty,
+                    status: "checked"
+                });
+            }
+            
+            logs.push({
+                barcode: item.barcode,
+                productName: item.name,
+                oldQty: null,
+                newQty: item.qty,
+                timestamp: new Date().toISOString()
+            });
+        });
+        
+        saveToLocalStorage();
+        renderSheet();
+        renderLogs();
+        updateStats();
+        updateProgress();
+        updateSummaryStats();
+        
+        batchQueue = [];
+        saveBatchQueue();
+        updateBatchUI();
+        
+        showNotification(`تم حفظ ${batchQueue.length} عنصر محلياً (المحاكاة)`, "success");
     }
 }
 
@@ -399,30 +717,22 @@ function queryMockProduct(barcode) {
         renderSheet(); // refresh table highlights
         showProductCard(product.name, product.barcode, product.bookQty, product.actualQty, product.status);
     } else {
-        // Product not found in local sheet - offer to create it
-        const newProduct = {
-            barcode: barcode,
-            name: `منتج جديد (رمز: ${barcode.slice(-4)})`,
-            bookQty: 0,
-            actualQty: null,
-            status: "pending"
-        };
-        products.push(newProduct);
-        saveToLocalStorage();
-        currentlyScannedProduct = newProduct;
-        renderSheet();
-        showProductCard(newProduct.name, newProduct.barcode, newProduct.bookQty, newProduct.actualQty, newProduct.status);
-        showNotification("منتج جديد غير مسجل، تم إنشاؤه تلقائياً", "info");
+        // Product not found in local sheet — show inline new product form
+        showNewProductCard(barcode);
+        playBeep("error");
+        triggerVibrate(200);
     }
 }
 
 // Google Sheets Live Query
 async function queryLiveProduct(barcode) {
     const url = document.getElementById("web-app-url").value.trim();
+    const token = document.getElementById("api-token").value.trim();
     showNotification("جاري البحث في جوجل شيت...", "info");
     
     try {
-        const fetchUrl = `${url}?action=get&barcode=${encodeURIComponent(barcode)}`;
+        let fetchUrl = `${url}?action=get&barcode=${encodeURIComponent(barcode)}`;
+        if (token) fetchUrl += `&token=${encodeURIComponent(token)}`;
         const response = await fetch(fetchUrl);
         const data = await response.json();
         
@@ -447,13 +757,10 @@ async function queryLiveProduct(barcode) {
             
             showProductCard(data.name, barcode, data.bookQty, data.actualQty, data.status);
         } else {
-            // Create a new product option
-            const newName = prompt("المنتج غير موجود في الشيت. أدخل اسم المنتج الجديد لإضافته:");
-            if (newName) {
-                addNewProductToLive(barcode, newName);
-            } else {
-                resetToScanMode();
-            }
+            // Show inline new product form instead of prompt
+            showNewProductCard(barcode);
+            playBeep("error");
+            triggerVibrate(200);
         }
     } catch (error) {
         console.error("Fetch error:", error);
@@ -463,12 +770,63 @@ async function queryLiveProduct(barcode) {
     }
 }
 
+// Show inline new product form
+function showNewProductCard(barcode) {
+    document.getElementById("scanner-section").style.display = "none";
+    document.getElementById("product-details-card").style.display = "none";
+    document.getElementById("new-product-card").style.display = "flex";
+    document.getElementById("new-product-barcode").innerText = `رمز الباركود: ${barcode}`;
+    document.getElementById("new-product-name").value = "";
+    document.getElementById("new-product-name").focus();
+}
+
+// Handle confirm new product
+function handleConfirmNewProduct() {
+    const name = document.getElementById("new-product-name").value.trim();
+    if (!name) {
+        showNotification("يرجى إدخال اسم المنتج", "error");
+        return;
+    }
+    
+    // Get barcode from the displayed text
+    const barcodeText = document.getElementById("new-product-barcode").innerText;
+    const barcode = barcodeText.replace("رمز الباركود: ", "");
+    
+    const isLive = document.getElementById("enable-live-sync").checked;
+    const url = document.getElementById("web-app-url").value.trim();
+    
+    if (isLive && url) {
+        addNewProductToLive(barcode, name);
+    } else {
+        // Mock add
+        const newProduct = {
+            barcode: barcode,
+            name: name,
+            bookQty: 0,
+            actualQty: null,
+            status: "pending"
+        };
+        products.push(newProduct);
+        saveToLocalStorage();
+        currentlyScannedProduct = newProduct;
+        renderSheet();
+        
+        document.getElementById("new-product-card").style.display = "none";
+        document.getElementById("scanner-section").style.display = "flex";
+        isProcessingScan = false;
+        
+        showNotification("تمت إضافة المنتج الجديد", "success");
+    }
+}
+
 async function addNewProductToLive(barcode, name) {
     const url = document.getElementById("web-app-url").value.trim();
+    const token = document.getElementById("api-token").value.trim();
     showNotification("جاري إضافة المنتج الجديد للشيت...", "info");
     
     try {
-        const fetchUrl = `${url}?action=add&barcode=${encodeURIComponent(barcode)}&name=${encodeURIComponent(name)}`;
+        let fetchUrl = `${url}?action=add&barcode=${encodeURIComponent(barcode)}&name=${encodeURIComponent(name)}`;
+        if (token) fetchUrl += `&token=${encodeURIComponent(token)}`;
         const response = await fetch(fetchUrl);
         const data = await response.json();
         
@@ -492,7 +850,9 @@ async function addNewProductToLive(barcode, name) {
             saveToLocalStorage();
             renderSheet();
             
-            showProductCard(name, barcode, 0, null, "pending");
+            document.getElementById("new-product-card").style.display = "none";
+            document.getElementById("scanner-section").style.display = "flex";
+            isProcessingScan = false;
         } else {
             showNotification("فشل إضافة المنتج", "error");
             resetToScanMode();
@@ -542,6 +902,7 @@ async function submitQuantity() {
 
     const isLive = document.getElementById("enable-live-sync").checked;
     const url = document.getElementById("web-app-url").value.trim();
+    const token = document.getElementById("api-token").value.trim();
     const barcode = currentlyScannedProduct.barcode;
     const oldQty = currentlyScannedProduct.actualQty;
 
@@ -554,7 +915,8 @@ async function submitQuantity() {
     if (isLive && url) {
         // Live Update in Google Sheets
         try {
-            const updateUrl = `${url}?action=update&barcode=${encodeURIComponent(barcode)}&qty=${newQty}`;
+            let updateUrl = `${url}?action=update&barcode=${encodeURIComponent(barcode)}&qty=${newQty}`;
+            if (token) updateUrl += `&token=${encodeURIComponent(token)}`;
             const response = await fetch(updateUrl);
             const data = await response.json();
             
@@ -613,6 +975,8 @@ async function submitQuantity() {
             renderSheet();
             renderLogs();
             updateStats();
+            updateProgress();
+            updateSummaryStats();
             
             submitBtn.disabled = false;
             submitBtn.innerHTML = originalText;
@@ -626,6 +990,7 @@ async function submitQuantity() {
 // Reset view back to scanning mode
 function resetToScanMode() {
     document.getElementById("product-details-card").style.display = "none";
+    document.getElementById("new-product-card").style.display = "none";
     document.getElementById("scanner-section").style.display = "flex";
     currentlyScannedProduct = null;
     isProcessingScan = false;
@@ -722,6 +1087,58 @@ function stopScanning() {
         readerDiv.style.display = "none";
         placeholder.style.display = "flex";
     }
+}
+
+// Dark Mode
+function toggleDarkMode() {
+    document.body.classList.toggle("dark-mode");
+    const isDark = document.body.classList.contains("dark-mode");
+    const icon = document.getElementById("dark-mode-icon");
+    
+    if (isDark) {
+        icon.className = "bi bi-sun-fill";
+        localStorage.setItem("dark_mode", "true");
+    } else {
+        icon.className = "bi bi-moon-stars-fill";
+        localStorage.setItem("dark_mode", "false");
+    }
+}
+
+function loadDarkModePreference() {
+    const isDark = localStorage.getItem("dark_mode") === "true";
+    if (isDark) {
+        document.body.classList.add("dark-mode");
+        document.getElementById("dark-mode-icon").className = "bi bi-sun-fill";
+    }
+}
+
+// Export CSV
+function exportCSV() {
+    let csv = "\uFEFF"; // BOM for Arabic support in Excel
+    csv += "الباركود,اسم المنتج,الكمية الدفترية,الكمية الفعلية,الفرق,الحالة\n";
+    
+    products.forEach(p => {
+        const actualQty = p.actualQty !== null ? p.actualQty : "";
+        const diff = (p.actualQty !== null && p.bookQty !== null) ? (parseInt(p.actualQty) - parseInt(p.bookQty)) : "";
+        const status = p.status === "checked" ? "تم الجرد" : "معلق";
+        
+        // Escape commas in names
+        const safeName = p.name.includes(",") ? `"${p.name}"` : p.name;
+        
+        csv += `${p.barcode},${safeName},${p.bookQty},${actualQty},${diff},${status}\n`;
+    });
+    
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `inventory_report_${new Date().toISOString().slice(0,10)}.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    showNotification("تم تصدير التقرير بصيغة CSV", "success");
 }
 
 // Register PWA Service Worker for mobile installability
