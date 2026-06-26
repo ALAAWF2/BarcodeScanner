@@ -40,12 +40,15 @@ function loadData() {
     }
 
     // Load Settings
-    const savedUrl = localStorage.getItem("google_app_url");
-    const savedLiveSync = localStorage.getItem("google_live_sync");
+    const defaultUrl = "https://script.google.com/macros/s/AKfycbxZPsBBfIef7zOaw88gaXajYNjVk0EvKmUwgar3RlxWxlAXmWvyGY88L2OTkYgYTVowKw/exec";
+    const savedUrl = localStorage.getItem("google_app_url") || defaultUrl;
+    const savedLiveSync = localStorage.getItem("google_live_sync") !== null ? localStorage.getItem("google_live_sync") : "true";
     
-    if (savedUrl) {
-        document.getElementById("web-app-url").value = savedUrl;
+    document.getElementById("web-app-url").value = savedUrl;
+    if (!localStorage.getItem("google_app_url")) {
+        localStorage.setItem("google_app_url", defaultUrl);
     }
+    
     if (savedLiveSync === "true") {
         document.getElementById("enable-live-sync").checked = true;
         updateConnectionBadge(true);
