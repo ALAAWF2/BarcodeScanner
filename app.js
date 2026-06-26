@@ -52,6 +52,7 @@ function loadData() {
     if (savedLiveSync === "true") {
         document.getElementById("enable-live-sync").checked = true;
         updateConnectionBadge(true);
+        fetchLiveProducts();
     } else {
         updateConnectionBadge(false);
     }
@@ -61,6 +62,44 @@ function loadData() {
 function saveToLocalStorage() {
     localStorage.setItem("inventory_products", JSON.stringify(products));
     localStorage.setItem("inventory_logs", JSON.stringify(logs));
+}
+
+// Fetch all products from Google Sheets
+async function fetchLiveProducts() {
+    const isLive = document.getElementById("enable-live-sync").checked;
+    const url = document.getElementById("web-app-url").value.trim();
+    
+    if (!isLive || !url) return;
+    
+    const tableBody = document.getElementById("sheet-table-body");
+    tableBody.innerHTML = `<tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--primary);">⏱️ جاري تحميل البيانات من جوجل شيت الحقيقي...</td></tr>`;
+    
+    try {
+        const fetchUrl = `${url}?action=all`;
+        const response = await fetch(fetchUrl);
+        const data = await response.json();
+        
+        if (data.success && data.products) {
+            products = data.products;
+            renderSheet();
+            updateStats();
+            showNotification("تم تحديث قائمة المنتجات من جوجل شيت", "success");
+        } else {
+            showNotification("خطأ في جلب بيانات جوجل شيت", "error");
+            loadFallbackMockData();
+        }
+    } catch (error) {
+        console.error("Live products fetch error:", error);
+        showNotification("تعذر الاتصال بجوجل شيت لجلب المنتجات", "error");
+        loadFallbackMockData();
+    }
+}
+
+function loadFallbackMockData() {
+    const savedProducts = localStorage.getItem("inventory_products");
+    products = savedProducts ? JSON.parse(savedProducts) : JSON.parse(JSON.stringify(DEFAULT_PRODUCTS));
+    renderSheet();
+    updateStats();
 }
 
 // Render Simulator Google Sheet Table
@@ -232,6 +271,12 @@ function setupEventListeners() {
         localStorage.setItem("google_live_sync", isChecked ? "true" : "false");
         updateConnectionBadge(isChecked);
         showNotification(isChecked ? "تم تفعيل الربط المباشر بجوجل شيت" : "تم الانتقال لوضع المحاكاة المحلي", "info");
+        
+        if (isChecked) {
+            fetchLiveProducts();
+        } else {
+            loadFallbackMockData();
+        }
     });
 
     document.getElementById("web-app-url").addEventListener("input", (e) => {
@@ -502,9 +547,8 @@ async function submitQuantity() {
                 });
                 
                 saveToLocalStorage();
-                renderSheet();
                 renderLogs();
-                updateStats();
+                fetchLiveProducts();
                 
                 showNotification("تم تحديث جوجل شيت بنجاح!", "success");
                 resetToScanMode();

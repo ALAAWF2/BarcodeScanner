@@ -41,6 +41,9 @@ function doGet(e) {
   else if (action === 'add') {
     return addNewProduct(sheet, e.parameter.barcode, e.parameter.name);
   }
+  else if (action === 'all') {
+    return getAllProducts(sheet);
+  }
   
   return createJsonResponse({ success: false, message: "أمر غير صالح أو مفقود" });
 }
@@ -131,4 +134,22 @@ function createJsonResponse(data) {
   var JSONString = JSON.stringify(data);
   return ContentService.createTextOutput(JSONString)
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+// 4. جلب جميع المنتجات في الشيت لعرضها بالجدول
+function getAllProducts(sheet) {
+  var data = sheet.getDataRange().getValues();
+  var productsList = [];
+  
+  for (var i = 1; i < data.length; i++) {
+    productsList.push({
+      barcode: String(data[i][0]).trim(),
+      name: data[i][1],
+      bookQty: data[i][2],
+      actualQty: data[i][3] === "" ? null : data[i][3],
+      status: data[i][4] || "pending"
+    });
+  }
+  
+  return createJsonResponse({ success: true, products: productsList });
 }
