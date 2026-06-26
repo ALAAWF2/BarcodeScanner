@@ -1,0 +1,18 @@
+{
+  "name": "مساعد الجرد الذكي",
+  "short_name": "مساعد الجرد",
+  "description": "تطبيق جرد مستودعات ذكي بالباركود متصل بجوجل شيت مباشرة",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f1f5f9",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3022/3022250.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+node_modules/
+video-explainer/node_modules/
+video-explainer/output.mp4
+.DS_Store
+*.log

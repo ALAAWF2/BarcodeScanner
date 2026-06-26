@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام جرد المستودعات الذكي بالباركود</title>
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#4f46e5">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- Main Style Sheet -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Html5-Qrcode CDN -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+</head>
+<body>
+
+    <!-- Header Section -->
+    <header>
+        <div class="header-title">
+            <h1>نظام الجرد الذكي بالباركود ⚡</h1>
+            <p>حل متكامل لربط الهواتف المحمولة بجداول جوجل شيت (Google Sheets)</p>
+        </div>
+        <div class="badge">
+            <span class="badge-dot"></span>
+            <span id="connection-status">وضع محاكاة البيانات النشط</span>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main>
+        
+        <!-- Left Side: Mobile Phone Mockup -->
+        <div class="preview-container">
+            <div class="phone-mockup">
+                <div class="phone-notch"></div>
+                <div class="phone-screen" id="phone-screen">
+                    
+                    <!-- App Header -->
+                    <div class="app-header">
+                        <div class="app-logo">
+                            <span class="app-logo-icon">📦</span>
+                            <div class="app-title">
+                                <h2>مساعد الجرد</h2>
+                                <p>نسخة العامل - الجوال</p>
+                            </div>
+                        </div>
+                        <button class="btn-circle" id="settings-toggle" title="الإعدادات والربط">
+                            <i class="bi bi-gear-fill"></i>
+                        </button>
+                    </div>
+
+                    <!-- App Content -->
+                    <div class="app-content">
+                        
+                        <!-- Internal App Quick Stats -->
+                        <div class="app-stats-row">
+                            <div class="app-stat-card">
+                                <div class="app-stat-val" id="app-checked-count">0 / 5</div>
+                                <div class="app-stat-lbl">المنتجات المنجزة</div>
+                            </div>
+                            <div class="app-stat-card">
+                                <div class="app-stat-val" id="app-last-scan">-</div>
+                                <div class="app-stat-lbl">آخر رمز ممسوح</div>
+                            </div>
+                        </div>
+
+                        <!-- Scanner Card -->
+                        <div class="scanner-card" id="scanner-section">
+                            <div class="scanner-view-container" id="scanner-container">
+                                <div class="laser-line"></div>
+                                <div class="scan-success-indicator" id="scan-success-indicator">
+                                    <div class="checkmark-icon">
+                                        <i class="bi bi-check-circle-fill"></i>
+                                    </div>
+                                </div>
+                                <div class="scan-placeholder" id="scan-placeholder">
+                                    <i class="bi bi-qr-code-scan scan-icon"></i>
+                                    <p>اضغط على زر المسح لتفعيل الكاميرا</p>
+                                </div>
+                                <div id="reader" style="display: none;"></div>
+                            </div>
+                            <button class="btn btn-primary" id="btn-toggle-scan">
+                                <i class="bi bi-camera"></i>
+                                <span id="scan-btn-text">افتح الكاميرا وابدأ المسح</span>
+                            </button>
+                        </div>
+
+                        <!-- Product Information & Edit Form (Hidden by default, shown when scanned) -->
+                        <div class="product-details-card" id="product-details-card" style="display: none;">
+                            <div class="product-info-header">
+                                <div>
+                                    <div class="product-name" id="det-product-name">اسم المنتج هنا</div>
+                                    <div class="product-code" id="det-barcode">123456789</div>
+                                </div>
+                                <span class="status-badge status-pending" id="det-status">معلق</span>
+                            </div>
+                            
+                            <div class="qty-display">
+                                <span>الكمية المسجلة حالياً:</span>
+                                <span id="det-current-qty">0</span>
+                            </div>
+
+                            <div class="quantity-updater">
+                                <div class="input-group">
+                                    <label>أدخل الكمية الفعلية بعد الجرد:</label>
+                                    <div class="qty-adjuster">
+                                        <button type="button" class="btn-circle" id="btn-qty-minus"><i class="bi bi-dash"></i></button>
+                                        <input type="number" class="qty-input" id="qty-input" value="1" min="0">
+                                        <button type="button" class="btn-circle" id="btn-qty-plus"><i class="bi bi-plus"></i></button>
+                                    </div>
+                                </div>
+
+                                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                                    <button class="btn btn-success" id="btn-submit-qty" style="flex: 2;">
+                                        <i class="bi bi-check2-circle"></i>
+                                        تأكيد وتحديث الشيت
+                                    </button>
+                                    <button class="btn btn-secondary" id="btn-cancel-qty" style="flex: 1;">
+                                        إلغاء
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Manual Input Form -->
+                        <div class="manual-input-box">
+                            <div class="input-group">
+                                <label for="manual-barcode">إدخال الباركود يدوياً (أو بقارئ ليزر):</label>
+                                <div class="input-row">
+                                    <input type="text" id="manual-barcode" class="form-control" placeholder="أدخل رمز الباركود...">
+                                    <button class="btn btn-primary" id="btn-manual-submit" style="width: auto; padding: 0 1.25rem;">
+                                        <i class="bi bi-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Side: Dashboard & Google Sheet Simulator -->
+        <div class="dashboard-container">
+            
+            <!-- Google Sheet Live Simulator -->
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <div class="dashboard-card-title">
+                        <i class="bi bi-table" style="color: #10b981;"></i>
+                        <span>محاكي Google Sheet (قاعدة البيانات أونلاين)</span>
+                    </div>
+                    <button class="btn btn-secondary" id="btn-reset-sheet" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; border-radius: 8px;">
+                        <i class="bi bi-arrow-counterclockwise"></i> إعادة ضبط البيانات
+                    </button>
+                </div>
+                <div class="dashboard-table-container">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>الباركود</th>
+                                <th>اسم المنتج</th>
+                                <th>الكمية الدفترية</th>
+                                <th>الكمية الفعلية</th>
+                                <th>الحالة</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sheet-table-body">
+                            <!-- Items populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Recent Activity / Logs -->
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <div class="dashboard-card-title">
+                        <i class="bi bi-clipboard-data" style="color: #6366f1;"></i>
+                        <span>سجل عمليات الجرد اللحظية</span>
+                    </div>
+                </div>
+                <div class="log-list" id="log-list">
+                    <div class="scan-placeholder" style="padding: 1rem 0;" id="empty-logs-msg">
+                        <p style="font-size: 0.85rem;">لم يتم إجراء أي عملية جرد بعد في هذه الجلسة.</p>
+                    </div>
+                    <!-- Logs populated by JS -->
+                </div>
+            </div>
+
+            <!-- Real Connection Settings -->
+            <div class="dashboard-card" id="settings-card">
+                <div class="dashboard-card-header">
+                    <div class="dashboard-card-title">
+                        <i class="bi bi-cloud-check-fill" style="color: #3b82f6;"></i>
+                        <span>إعدادات الربط المباشر بجوجل شيت الحقيقي</span>
+                    </div>
+                </div>
+                <div class="config-panel">
+                    <div class="alert-info-box">
+                        💡 <strong>طريقة التفعيل للعميل:</strong> يقوم العميل بنسخ الكود البرمجي المرفق في ملف <code>google-script.js</code> ولصقه في شيت جوجل الخاص به، ثم يضع الرابط الناتج هنا للربط المباشر.
+                    </div>
+                    <div class="input-group" style="margin-top: 0.5rem;">
+                        <label for="web-app-url">رابط تطبيق ويب جوجل (Google Apps Script URL):</label>
+                        <input type="url" id="web-app-url" class="form-control" style="font-family: var(--font-en);" placeholder="https://script.google.com/macros/s/.../exec">
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem;">
+                        <input type="checkbox" id="enable-live-sync" style="width: 18px; height: 18px; cursor: pointer;">
+                        <label for="enable-live-sync" style="cursor: pointer; font-weight: 600; font-size: 0.9rem;">تفعيل الربط المباشر بالإنترنت (Live Sync)</label>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Success Beep Audio (Generated via Web Audio API, but we keep an optional backup sound element if needed) -->
+    <script src="app.js"></script>
+</body>
+</html>
