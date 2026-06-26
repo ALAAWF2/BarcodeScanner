@@ -5,8 +5,8 @@ export const ExplainerVideo: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  // Slide durations in frames (90 frames = 3 seconds at 30fps)
-  const slideDuration = 90;
+  // Slide durations in frames (120 frames = 4 seconds at 30fps)
+  const slideDuration = 120;
   
   // Calculate which slide is active
   const currentSlide = Math.floor(frame / slideDuration);
@@ -144,12 +144,12 @@ export const ExplainerVideo: React.FC = () => {
         <span style={styles.headerText}>نظام الجرد الذكي بالباركود</span>
       </div>
 
-      {/* Slide 1: Introduction (Frames 0 - 89) */}
+      {/* Slide 1: Introduction (Frames 0 - 119) */}
       {currentSlide === 0 && (
         <div style={{
           ...styles.slideContainer,
-          opacity: interpolate(slideFrame, [0, 10, 80, 89], [0, 1, 1, 0]),
-          transform: `scale(${interpolate(slideFrame, [0, 10], [0.95, 1], { extrapolateRight: "clamp" })})`
+          opacity: interpolate(slideFrame, [0, 25, 100, 119], [0, 1, 1, 0]),
+          transform: `scale(${interpolate(slideFrame, [0, 25], [0.95, 1], { extrapolateRight: "clamp" })})`
         }}>
           <div style={{ ...styles.contentArea, flex: 2, textAlign: "center" }}>
             <h1 style={{ ...styles.title, fontSize: 68, marginBottom: 15 }}>
@@ -165,18 +165,18 @@ export const ExplainerVideo: React.FC = () => {
           <div style={{
             ...styles.visualArea,
             fontSize: 180,
-            transform: `rotate(${interpolate(slideFrame, [0, 80], [-10, 10])}deg)`
+            transform: `rotate(${interpolate(slideFrame, [0, 100], [-10, 10])}deg)`
           }}>
             📲
           </div>
         </div>
       )}
 
-      {/* Slide 2: Step 1 - Scan (Frames 90 - 179) */}
+      {/* Slide 2: Step 1 - Scan (Frames 120 - 239) */}
       {currentSlide === 1 && (
         <div style={{
           ...styles.slideContainer,
-          opacity: interpolate(slideFrame, [0, 10, 80, 89], [0, 1, 1, 0])
+          opacity: interpolate(slideFrame, [0, 25, 100, 119], [0, 1, 1, 0])
         }}>
           <div style={styles.contentArea}>
             <div style={styles.stepBadge}>الخطوة 1</div>
@@ -233,11 +233,11 @@ export const ExplainerVideo: React.FC = () => {
         </div>
       )}
 
-      {/* Slide 3: Step 2 - Edit Qty (Frames 180 - 269) */}
+      {/* Slide 3: Step 2 - Edit Qty (Frames 240 - 359) */}
       {currentSlide === 2 && (
         <div style={{
           ...styles.slideContainer,
-          opacity: interpolate(slideFrame, [0, 10, 80, 89], [0, 1, 1, 0])
+          opacity: interpolate(slideFrame, [0, 25, 100, 119], [0, 1, 1, 0])
         }}>
           <div style={styles.contentArea}>
             <div style={styles.stepBadge}>الخطوة 2</div>
@@ -268,7 +268,7 @@ export const ExplainerVideo: React.FC = () => {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 15, marginTop: 10 }}>
                     <button style={{ width: 35, height: 35, borderRadius: "50%", border: "1px solid #cbd5e1", backgroundColor: "#fff", fontSize: 20 }}>-</button>
                     <span style={{ fontSize: 24, fontWeight: 800, color: "#4f46e5" }}>
-                      {interpolate(slideFrame, [0, 40, 80], [120, 123, 125], { extrapolateRight: "clamp" })}
+                      {Math.round(interpolate(slideFrame, [25, 60, 95], [120, 123, 125], { extrapolateRight: "clamp" }))}
                     </span>
                     <button style={{ width: 35, height: 35, borderRadius: "50%", border: "1px solid #cbd5e1", backgroundColor: "#4f46e5", color: "#fff", fontSize: 20 }}>+</button>
                   </div>
@@ -291,11 +291,11 @@ export const ExplainerVideo: React.FC = () => {
         </div>
       )}
 
-      {/* Slide 4: Step 3 - Sync (Frames 270 - 359) */}
+      {/* Slide 4: Step 3 - Sync (Frames 360 - 479) */}
       {currentSlide === 3 && (
         <div style={{
           ...styles.slideContainer,
-          opacity: interpolate(slideFrame, [0, 10, 80, 89], [0, 1, 1, 0])
+          opacity: interpolate(slideFrame, [0, 25, 100, 119], [0, 1, 1, 0])
         }}>
           <div style={styles.contentArea}>
             <div style={styles.stepBadge}>الخطوة 3</div>
@@ -341,21 +341,21 @@ export const ExplainerVideo: React.FC = () => {
                   </tr>
                   {/* The Row that animates live */}
                   <tr style={{
-                    backgroundColor: interpolateColors(slideFrame, [0, 30, 80], ["#ffffff", "rgba(16, 185, 129, 0.1)", "#ffffff"]),
+                    backgroundColor: interpolateColors(slideFrame, [0, 45, 95], ["#ffffff", "rgba(16, 185, 129, 0.1)", "#ffffff"]),
                     borderBottom: "1px solid #e2e8f0"
                   }}>
                     <td style={{ padding: 10, fontFamily: "monospace" }}>012000046450</td>
                     <td style={{ padding: 10, fontWeight: 700 }}>بيبسي علبة 320 مل</td>
                     <td style={{ padding: 10 }}>120</td>
                     <td style={{ padding: 10, fontWeight: 700, color: "#059669" }}>
-                      {slideFrame > 30 ? "125" : "-"}
+                      {slideFrame > 45 ? "125" : "-"}
                     </td>
                     <td style={{ padding: 10 }}>
                       <span style={{
-                        color: slideFrame > 30 ? "#059669" : "#d97706",
+                        color: slideFrame > 45 ? "#059669" : "#d97706",
                         fontWeight: 700
                       }}>
-                        {slideFrame > 30 ? "تم الجرد ✓" : "معلق"}
+                        {slideFrame > 45 ? "تم الجرد ✓" : "معلق"}
                       </span>
                     </td>
                   </tr>
@@ -366,11 +366,11 @@ export const ExplainerVideo: React.FC = () => {
         </div>
       )}
 
-      {/* Slide 5: Outro (Frames 360 - 449) */}
+      {/* Slide 5: Outro (Frames 480 - 599) */}
       {currentSlide === 4 && (
         <div style={{
           ...styles.slideContainer,
-          opacity: interpolate(slideFrame, [0, 10, 80, 89], [0, 1, 1, 0]),
+          opacity: interpolate(slideFrame, [0, 25, 100, 119], [0, 1, 1, 0]),
           justifyContent: "center",
           textAlign: "center"
         }}>
